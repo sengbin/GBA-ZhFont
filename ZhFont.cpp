@@ -10,6 +10,7 @@
 #include "ZhFont.h"
 
 #include "ZhFontGb2312Table.h"
+#include <string.h>
 
 extern const unsigned char g_zhfont_hzk12_start[];
 extern const unsigned char g_zhfont_hzk12_end[];
@@ -342,5 +343,47 @@ void ZhFont_DrawUtf8TextMode3(const char* utf8, int x, int y, u16 color)
         cx += 12;
         if (cx >= 240)
             break;
+    }
+}
+
+void ZhFont_DrawUtf8Text_Typing(const char* utf8, int x, int y, u16 color, int framesPerChar)
+{
+    if (!utf8)
+        return;
+
+    int len = (int)strlen(utf8);
+    char buf[256]; // 临时缓冲，支持短文本
+    if (len >= (int)sizeof(buf)) len = (int)sizeof(buf) - 1;
+
+    int pos = 0;    // 已消费的字节数
+    int outLen = 0; // 输出缓冲当前长度
+    while (pos < len)
+    {
+        unsigned char c = (unsigned char)utf8[pos];
+        int charBytes = 1;
+        if (c < 0x80) charBytes = 1;            // ASCII
+        else if ((c & 0xE0) == 0xC0) charBytes = 2; // 2 字节 UTF-8
+        else if ((c & 0xF0) == 0xE0) charBytes = 3; // 3 字节 UTF-8
+        else if ((c & 0xF8) == 0xF0) charBytes = 4; // 4 字节 UTF-8
+
+        if (pos + charBytes > len) charBytes = len - pos;
+        if (outLen + charBytes >= (int)sizeof(buf))
+            break; // 避免缓冲区溢出
+
+        memcpy(buf + outLen, utf8 + pos, charBytes);
+        outLen += charBytes;
+        buf[outLen] = '\0';
+
+        // 绘制当前已累积的子串（复用现有 UTF-8 绘制函数）
+        ZhFont_DrawUtf8TextMode3(buf, x, y, color);
+
+        // 等待若干帧以产生打字机效果
+        if (framesPerChar > 0)
+        {
+            for (int f = 0; f < framesPerChar; ++f)
+                VBlankIntrWait();
+        }
+
+        pos += charBytes;
     }
 }
